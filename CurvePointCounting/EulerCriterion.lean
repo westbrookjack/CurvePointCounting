@@ -6,14 +6,8 @@ open Polynomial
 namespace EulerCriterion
 
 /-!
-## Euler's criterion over a finite field (via algebraic closures)
-
-This file proves Euler's criterion for a finite field `K` of odd characteristic:
-`IsSquare a ↔ a ^ ((card K - 1) / 2) = 1`.
-
-A key intermediate step is to characterize the elements of the algebraic closure
-satisfying `b ^ (card K) = b` as exactly the image of `K` under the canonical
-embedding into `AlgebraicClosure K`.
+Note: this file is an exact copy of a submission for my second project. Thus for grading purposes,
+one should ignore this and instead only look at the file `PointCounting.lean`.
 -/
 
 section Definitions

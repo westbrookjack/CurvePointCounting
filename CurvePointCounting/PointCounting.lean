@@ -3,26 +3,49 @@ import Mathlib
 
 open BigOperators
 
-
 namespace CurvePointCounting
 
+/-!
+# Quadratic characters and point counting over finite fields
+
+This file develops the basic theory of quadratic characters on the unit group of a finite field
+of odd characteristic, proves existence and uniqueness of the quadratic character, and derives
+a formula for counting affine points on curves of the form `y^2 = f(x)` over finite fields, yielding
+the estimate `#{(x,y) : K × K | y^2 = f x} ≤  2#K`, where `f : K → K` is any function.
+
+## Definitions
+
+- `IsQuadraticCharacter`
+- `quadChar`
+- `CharToFun`
+- `affinePointSet_f`
+
+## Results
+
+- `exists_unique_quadraticCharacter`
+- `affinePointSet_f_count`
+- `affinePointSet_bounds`
+
+## Notes
+
+The quadratic character is first defined on `Kˣ →* ℂˣ` and then extended to a function
+`K → ℂ` with `CharToFun` by sending `0` to `0`.
+-/
 
 variable {K : Type*} [Field K] [Fintype K] [DecidableEq K]
 
 noncomputable local instance : Fintype Kˣ := Fintype.ofFinite Kˣ
 
-
+/-- A quadratic character on `Kˣ` is a nontrivial multiplicative character of order `2`. -/
 structure IsQuadraticCharacter (χ : Kˣ →* ℂˣ) : Prop where
   sq_eq_one : ∀ a, χ a ^ 2 = 1
   nontrivial : χ ≠ 1
 
-
-
-
-section Basic
+section QuadraticCharacter
 
 omit [DecidableEq K] in
-lemma char_ne_2_impl_card_ne_2 : ringChar K ≠ 2 → Fintype.card K ≠ 2 := by
+/-- If `ringChar K ≠ 2`, then `Fintype.card K ≠ 2`. -/
+lemma card_ne_two_of_ringChar_ne_two : ringChar K ≠ 2 → Fintype.card K ≠ 2 := by
   contrapose!
   intro hK
   rw [← @neg_one_eq_one_iff]
@@ -31,7 +54,6 @@ lemma char_ne_2_impl_card_ne_2 : ringChar K ≠ 2 → Fintype.card K ≠ 2 := by
     have h_univ : (Finset.univ : Finset K).card = 2 := by
       simpa using hK
     rcases Finset.card_eq_two.mp h_univ with ⟨a, b, hab, huniv⟩
-    -- huniv : (Finset.univ : Finset K) = {a, b}
     have h0mem : (0 : K) ∈ ({a, b} : Finset K) := by
       have : (0 : K) ∈ (Finset.univ : Finset K) := by simp
       simpa [huniv] using this
@@ -66,8 +88,8 @@ lemma char_ne_2_impl_card_ne_2 : ringChar K ≠ 2 → Fintype.card K ≠ 2 := by
   have := heltk (-1)
   tauto
 
-
-
+/-- This defines the Frobenius endomorphism on a field of characteristic `2`. It is used
+to prove that every element of `K` is a square iff `K` has characteristic `2`. -/
 noncomputable def frobRing (hchar : ringChar K = 2) : K →+* K where
     toFun := fun u => u ^ 2
     map_one' := by simp
@@ -77,8 +99,7 @@ noncomputable def frobRing (hchar : ringChar K = 2) : K →+* K where
     map_zero' := by simp
     map_add' := by
       intro x y
-      -- only true in char 2
-      simp only [pow_two,mul_add, add_mul]
+      simp only [pow_two, mul_add, add_mul]
       rw[mul_comm y x, add_assoc]
       simp only [add_right_inj]
       rw[← add_assoc]
@@ -96,8 +117,8 @@ noncomputable def frobRing (hchar : ringChar K = 2) : K →+* K where
         simp only [zero_mul]
       exact this (x * y)
 
-
 omit [Fintype K] [DecidableEq K] in
+/-- The Frobenius endomorphism in characteristic `2` is injective. -/
 lemma frobRing_is_injective (hchar : ringChar K = 2) : Function.Injective (frobRing hchar) := by
   apply (RingHom.injective_iff_ker_eq_bot (frobRing hchar)).mpr
   rw [@RingHom.ker_eq_bot_iff_eq_zero]
@@ -106,13 +127,15 @@ lemma frobRing_is_injective (hchar : ringChar K = 2) : Function.Injective (frobR
   exact hx
 
 omit [Fintype K] [DecidableEq K] in
+/-- Since Frobenius is injective, on a finite field it is also surjective. -/
 lemma frobRing_is_surjective [Finite K] (hchar : ringChar K = 2) :
     Function.Surjective (frobRing hchar) := by
   rw[← Finite.injective_iff_surjective]
   exact frobRing_is_injective hchar
 
 omit [Fintype K] [DecidableEq K] in
-lemma quad_char_triv [Finite K] : (∀ x : K, IsSquare x) ↔ ringChar K = 2 := by
+/-- Every element of `K` is a square if and only if `K` has characteristic `2`. -/
+lemma all_isSquare_iff_ringChar_eq_two [Finite K] : (∀ x : K, IsSquare x) ↔ ringChar K = 2 := by
   constructor
   · intro hc
     have hsurj : Function.Surjective (fun u : Kˣ => u ^ 2) := by
@@ -148,14 +171,15 @@ lemma quad_char_triv [Finite K] : (∀ x : K, IsSquare x) ↔ ringChar K = 2 := 
     have h1promotes : 1 = (Units.mk0 (1 : K) (by norm_num)) := by
       norm_num
     rw[h1promotes] at this
-    have idk (a b : K) (ha : a≠ 0) (hb : b ≠ 0) : Units.mk0 a ha = Units.mk0 b hb → a = b := by
+    have downward_eq (a b : K) (ha : a ≠ 0) (hb : b ≠ 0) :
+        Units.mk0 a ha = Units.mk0 b hb → a = b := by
       intro h
       apply congrArg (fun u : Kˣ => (u : K)) h
-    apply idk (-1 : K) 1 hneg1not0 (by norm_num) this
+    apply downward_eq (-1 : K) 1 hneg1not0 (by norm_num) this
   · intro hK x
     have : ∃ y : K, y^2 = x := by
       have : ∃ y : K, x = (frobRing hK) y := by
-        have hsqrtexists :=  (frobRing_is_surjective hK) x
+        have hsqrtexists := (frobRing_is_surjective hK) x
         rcases hsqrtexists with ⟨y, hy⟩
         use y
         rw[← hy]
@@ -169,7 +193,8 @@ lemma quad_char_triv [Finite K] : (∀ x : K, IsSquare x) ↔ ringChar K = 2 := 
     exact pow_two y
 
 omit [Fintype K] [DecidableEq K] in
-lemma is_square_conversion_from_unit (x : Kˣ) : IsSquare (x : K) ↔ IsSquare x := by
+/-- Convert between being a square in `K` and being a square in `Kˣ`. -/
+lemma isSquare_coe_unit_iff (x : Kˣ) : IsSquare (x : K) ↔ IsSquare x := by
   constructor
   · intro h
     rcases h with ⟨y, hy⟩
@@ -198,22 +223,24 @@ lemma is_square_conversion_from_unit (x : Kˣ) : IsSquare (x : K) ↔ IsSquare x
     exact Units.val_mul y y
 
 omit [Fintype K] [DecidableEq K] in
-lemma is_square_conversion_from_field (y : K) (hy0 : y ≠ 0) :
+/-- Convert between being a square in `K` and being a square in `Kˣ` for a nonzero element. -/
+lemma isSquare_mk0_iff (y : K) (hy0 : y ≠ 0) :
     IsSquare y ↔ IsSquare (Units.mk0 y hy0) := by
   constructor
   · intro h
-    rw[← is_square_conversion_from_unit (Units.mk0 y hy0)]
+    rw[← isSquare_coe_unit_iff (Units.mk0 y hy0)]
     have : y = (Units.mk0 y hy0 : K) := Eq.symm (Units.val_mk0 hy0)
-    rw[←this]
+    rw[← this]
     exact h
   · intro h
-    rw[← is_square_conversion_from_unit (Units.mk0 y hy0)] at h
+    rw[← isSquare_coe_unit_iff (Units.mk0 y hy0)] at h
     have : y = (Units.mk0 y hy0 : K) := Eq.symm (Units.val_mk0 hy0)
     rw[← this] at h
     exact h
 
-
-lemma not_1_impl_neg_1 {K : Type*} [Field K] {x : K} (hx : x ^ 2 = 1) (_ : x ≠ 1) : x = -1 := by
+/-- If `x^2 = 1` and `x ≠ 1`, then `x = -1`. -/
+lemma eq_neg_one_of_sq_eq_one_of_ne_one {K : Type*} [Field K] {x : K}
+    (hx : x ^ 2 = 1) (_ : x ≠ 1) : x = -1 := by
   have h0 : (x - 1) * (x + 1) = 0 := by
     simp only [mul_add, mul_one, sub_mul, one_mul, ← pow_two, hx]
     norm_num
@@ -223,10 +250,8 @@ lemma not_1_impl_neg_1 {K : Type*} [Field K] {x : K} (hx : x ^ 2 = 1) (_ : x ≠
   · grind
   · grind
 
-
-
-
-lemma sq_euler_criterion_eq_one {K : Type*} [Field K] [Fintype K] {x : K} (hx0 : x ≠ 0)
+/-- If `x ≠ 0` and `ringChar K ≠ 2`, then the square of `x ^ ((|K| - 1) / 2)` is `1`. -/
+lemma eulerCriterion_sq_eq_one {K : Type*} [Field K] [Fintype K] {x : K} (hx0 : x ≠ 0)
     (hchar : ringChar K ≠ 2) :
     ((x ^ ((Fintype.card K - 1) / 2)) ^ 2 = 1) := by
   have hx20 := pow_ne_zero 2 hx0
@@ -239,12 +264,12 @@ lemma sq_euler_criterion_eq_one {K : Type*} [Field K] [Fintype K] {x : K} (hx0 :
   use x
   exact pow_two x
 
-
-
+/-- The underlying function of the quadratic character. -/
 noncomputable def quadCharFun {K : Type*} [Field K] (x : Kˣ) : ℂˣ := by
   classical
   exact if IsSquare x then 1 else (-1 : ℂˣ)
 
+/-- The quadratic character `Kˣ →* ℂˣ`. -/
 noncomputable def quadChar {K : Type*} [Field K] [Fintype K] : Kˣ →* ℂˣ where
   toFun := quadCharFun
   map_one' := by
@@ -260,7 +285,7 @@ noncomputable def quadChar {K : Type*} [Field K] [Fintype K] : Kˣ →* ℂˣ wh
     · exfalso
       by_cases hchar2 : (ringChar K = 2)
       · apply h3
-        have := (quad_char_triv.mpr hchar2 y)
+        have := (all_isSquare_iff_ringChar_eq_two.mpr hchar2 y)
         rcases this with ⟨z, hz⟩
         have hzne0: z ≠ 0 := by
           intro h
@@ -277,10 +302,10 @@ noncomputable def quadChar {K : Type*} [Field K] [Fintype K] : Kˣ →* ℂˣ wh
         rw[this]
         rw[← pow_two] at hz
         exact Units.val_inj.mp hz
-      · rw[← is_square_conversion_from_unit (x * y)] at h1
+      · rw[← isSquare_coe_unit_iff (x * y)] at h1
         simp only [Units.val_mul] at h1
-        rw[← is_square_conversion_from_unit x] at h2
-        rw[← is_square_conversion_from_unit y] at h3
+        rw[← isSquare_coe_unit_iff x] at h2
+        rw[← isSquare_coe_unit_iff y] at h3
         rw [EulerCriterion.euler_criterion (K := K) ((x * y) : K) hxy0 hchar2] at h1
         rw [EulerCriterion.euler_criterion (K := K) (x : K) hx0 hchar2] at h2
         rw[EulerCriterion.euler_criterion (K := K) (y : K) hy0 hchar2] at h3
@@ -292,7 +317,7 @@ noncomputable def quadChar {K : Type*} [Field K] [Fintype K] : Kˣ →* ℂˣ wh
     · exfalso
       by_cases hchar2 : (ringChar K = 2)
       · apply h2
-        have := (quad_char_triv.mpr hchar2 x)
+        have := (all_isSquare_iff_ringChar_eq_two.mpr hchar2 x)
         rcases this with ⟨z, hz⟩
         have hzne0: z ≠ 0 := by
           intro h
@@ -309,10 +334,10 @@ noncomputable def quadChar {K : Type*} [Field K] [Fintype K] : Kˣ →* ℂˣ wh
         rw[this]
         rw[← pow_two] at hz
         exact Units.val_inj.mp hz
-      · rw[← is_square_conversion_from_unit (x * y)] at h1
+      · rw[← isSquare_coe_unit_iff (x * y)] at h1
         simp only [Units.val_mul] at h1
-        rw[← is_square_conversion_from_unit x] at h2
-        rw[← is_square_conversion_from_unit y] at h4
+        rw[← isSquare_coe_unit_iff x] at h2
+        rw[← isSquare_coe_unit_iff y] at h4
         rw [EulerCriterion.euler_criterion (K := K) ((x * y) : K) hxy0 hchar2] at h1
         rw [EulerCriterion.euler_criterion (K := K) (x : K) hx0 hchar2] at h2
         rw[EulerCriterion.euler_criterion (K := K) (y : K) hy0 hchar2] at h4
@@ -325,7 +350,7 @@ noncomputable def quadChar {K : Type*} [Field K] [Fintype K] : Kˣ →* ℂˣ wh
     · exfalso
       by_cases hchar2 : (ringChar K = 2)
       · apply h1
-        have := (quad_char_triv.mpr hchar2 (x*y))
+        have := (all_isSquare_iff_ringChar_eq_two.mpr hchar2 (x*y))
         rcases this with ⟨z, hz⟩
         have hzne0: z ≠ 0 := by
           intro h
@@ -342,10 +367,10 @@ noncomputable def quadChar {K : Type*} [Field K] [Fintype K] : Kˣ →* ℂˣ wh
         rw[this]
         rw[← pow_two] at hz
         exact Units.val_inj.mp hz
-      · rw[← is_square_conversion_from_unit (x * y)] at h1
+      · rw[← isSquare_coe_unit_iff (x * y)] at h1
         simp only [Units.val_mul] at h1
-        rw[← is_square_conversion_from_unit x] at h5
-        rw[← is_square_conversion_from_unit y] at h6
+        rw[← isSquare_coe_unit_iff x] at h5
+        rw[← isSquare_coe_unit_iff y] at h6
         rw [EulerCriterion.euler_criterion (K := K) ((x * y) : K) hxy0 hchar2] at h1
         rw [EulerCriterion.euler_criterion (K := K) (x : K) hx0 hchar2] at h5
         rw[EulerCriterion.euler_criterion (K := K) (y : K) hy0 hchar2] at h6
@@ -358,7 +383,7 @@ noncomputable def quadChar {K : Type*} [Field K] [Fintype K] : Kˣ →* ℂˣ wh
     · exfalso
       by_cases hchar2 : (ringChar K = 2)
       · apply h1
-        have := (quad_char_triv.mpr hchar2 (x*y))
+        have := (all_isSquare_iff_ringChar_eq_two.mpr hchar2 (x*y))
         rcases this with ⟨z, hz⟩
         have hzne0: z ≠ 0 := by
           intro h
@@ -375,26 +400,23 @@ noncomputable def quadChar {K : Type*} [Field K] [Fintype K] : Kˣ →* ℂˣ wh
         rw[this]
         rw[← pow_two] at hz
         exact Units.val_inj.mp hz
-      · rw[← is_square_conversion_from_unit (x * y)] at h1
+      · rw[← isSquare_coe_unit_iff (x * y)] at h1
         simp only [Units.val_mul] at h1
-        rw[← is_square_conversion_from_unit x] at h5
-        rw[← is_square_conversion_from_unit y] at h7
+        rw[← isSquare_coe_unit_iff x] at h5
+        rw[← isSquare_coe_unit_iff y] at h7
         rw [EulerCriterion.euler_criterion (K := K) ((x * y) : K) hxy0 hchar2] at h1
         rw [EulerCriterion.euler_criterion (K := K) (x : K) hx0 hchar2] at h5
         rw[EulerCriterion.euler_criterion (K := K) (y : K) hy0 hchar2] at h7
-        have hx := not_1_impl_neg_1 (sq_euler_criterion_eq_one hx0 hchar2) h5
-        have hy := not_1_impl_neg_1 (sq_euler_criterion_eq_one hy0 hchar2) h7
-        have hxy := not_1_impl_neg_1 (sq_euler_criterion_eq_one hxy0 hchar2) h1
+        have hx := eq_neg_one_of_sq_eq_one_of_ne_one (eulerCriterion_sq_eq_one hx0 hchar2) h5
+        have hy := eq_neg_one_of_sq_eq_one_of_ne_one (eulerCriterion_sq_eq_one hy0 hchar2) h7
+        have hxy := eq_neg_one_of_sq_eq_one_of_ne_one (eulerCriterion_sq_eq_one hxy0 hchar2) h1
         rw[mul_pow, hx, hy] at hxy
         norm_num at hxy
         have := neg_one_eq_one_iff.mp (id (Eq.symm hxy))
         tauto
 
-
-
-
-
-lemma quadChar_is_quadratic_char {K : Type*} [Field K] [Fintype K] (hchar : ringChar K ≠ 2) :
+/-- `quadChar` is a quadratic character. -/
+lemma quadChar_isQuadraticCharacter {K : Type*} [Field K] [Fintype K] (hchar : ringChar K ≠ 2) :
     IsQuadraticCharacter (@quadChar K _ _) := by
   constructor
   · intro a
@@ -415,19 +437,21 @@ lemma quadChar_is_quadratic_char {K : Type*} [Field K] [Fintype K] (hchar : ring
       intro x
       by_cases hx0 : x = 0
       · simp only [hx0, IsSquare.zero]
-      · rw[is_square_conversion_from_field x hx0]
+      · rw[isSquare_mk0_iff x hx0]
         exact this (Units.mk0 x hx0)
-    apply (quad_char_triv.mp) at this
+    apply (all_isSquare_iff_ringChar_eq_two.mp) at this
     tauto
 
 omit [Fintype K] [DecidableEq K] in
-lemma quad_char_values (χ : Kˣ →* ℂˣ) (hχ : IsQuadraticCharacter χ) (x : Kˣ) :
+/-- The values of any quadratic character lie in `{±1}`. -/
+lemma quadraticCharacter_eq_one_or_eq_neg_one (χ : Kˣ →* ℂˣ)
+    (hχ : IsQuadraticCharacter χ) (x : Kˣ) :
     χ x = 1 ∨ χ x = -1 := by
   have hsq : χ x ^ 2 = 1 := hχ.sq_eq_one x
   by_cases h : χ x = 1
   · left; exact h
   · right
-    have hsqC: (χ x : ℂ)^2 = 1 := (mem_rootsOfUnity' 2 (χ x)).mp hsq
+    have hsqC : (χ x : ℂ)^2 = 1 := (mem_rootsOfUnity' 2 (χ x)).mp hsq
     have hχC : (χ x : ℂ) ≠ 1 := by
       by_contra hc
       have : χ x = 1 := by
@@ -435,14 +459,14 @@ lemma quad_char_values (χ : Kˣ →* ℂˣ) (hχ : IsQuadraticCharacter χ) (x 
         exact hc
       tauto
     have hχxneg1 : (χ x : ℂ) = -1 := by
-      exact not_1_impl_neg_1 hsqC hχC
+      exact eq_neg_one_of_sq_eq_one_of_ne_one hsqC hχC
     have hχxne0 : (χ x : ℂ) ≠ 0 := by
       rw[hχxneg1]
       norm_num
     have : Units.mk0 (χ x : ℂ) hχxne0 = χ x := Units.mk0_val (χ x) hχxne0
     have hneg1ne0 : (-1 : ℂ) ≠ 0 := by
       norm_num
-    have hsimp: Units.mk0 (-1 : ℂ) hneg1ne0 = Units.mk0 (χ x : ℂ) hχxne0 :=
+    have hsimp : Units.mk0 (-1 : ℂ) hneg1ne0 = Units.mk0 (χ x : ℂ) hχxne0 :=
       Units.mk0.congr_simp (-1) (↑(χ x)) (id (Eq.symm hχxneg1)) hneg1ne0
     rw[← hsimp] at this
     symm
@@ -450,6 +474,7 @@ lemma quad_char_values (χ : Kˣ →* ℂˣ) (hχ : IsQuadraticCharacter χ) (x 
       exact Units.val_inj.mp rfl
     rwa[← hneg1promotes] at this
 
+/-- The subgroup `{±1}` of `ℂˣ`. -/
 def plusMinusOneSubgroup : Subgroup ℂˣ where
   carrier := { z : ℂˣ | z = 1 ∨ z = -1 }
   one_mem' := by
@@ -462,6 +487,7 @@ def plusMinusOneSubgroup : Subgroup ℂˣ where
     intro z hz
     rcases hz with rfl | rfl <;> simp
 
+/-- `{±1}` is finite. -/
 noncomputable instance : Fintype plusMinusOneSubgroup where
   elems :=
     { ⟨(1 : ℂˣ), by simp [plusMinusOneSubgroup]⟩,
@@ -476,7 +502,8 @@ noncomputable instance : Fintype plusMinusOneSubgroup where
     · simp only [Finset.mem_insert, one_mem, Subtype.mk.injEq, neg_units_ne_self,
       Finset.mem_singleton, or_true]
 
-lemma z_square_eq_one_implies_z_eq_one_or_neg_one (z : ℂ) (hz : z ^ 2 = 1) : z = 1 ∨ z = -1 := by
+/-- If `z^2 = 1` in `ℂ`, then `z = 1` or `z = -1`. -/
+lemma eq_one_or_eq_neg_one_of_sq_eq_one (z : ℂ) (hz : z ^ 2 = 1) : z = 1 ∨ z = -1 := by
       have : z ^ 2 - 1 = 0 := by
         rw[hz]
         norm_num
@@ -484,19 +511,21 @@ lemma z_square_eq_one_implies_z_eq_one_or_neg_one (z : ℂ) (hz : z ^ 2 = 1) : z
         simp only [mul_add, mul_one, sub_mul, one_mul, ← pow_two]
         norm_num
         exact this
-      have : z - 1 = 0 ∨ z + 1 = 0 :=  mul_eq_zero.mp this
+      have : z - 1 = 0 ∨ z + 1 = 0 := mul_eq_zero.mp this
       rcases this with h1 | hneg1
       · left
-        have : (z-1) + 1 = 0 + 1 := by
+        have : (z - 1) + 1 = 0 + 1 := by
           rw[h1]
         simpa only [sub_add_cancel, zero_add] using this
       · right
-        have : (z+1) - 1 = 0 - 1 := by
+        have : (z + 1) - 1 = 0 - 1 := by
           rw[hneg1]
         simpa only [add_sub_cancel_right, zero_sub] using this
 
 omit [Fintype K] [DecidableEq K] in
-lemma quad_char_has_range_in_plusMinusOne {z : ℂˣ} (χ : Kˣ →* ℂˣ) (hχ : IsQuadraticCharacter χ) :
+/-- The range of any quadratic character is contained in `{±1}`. -/
+lemma quadraticCharacter_range_le_plusMinusOne {z : ℂˣ} (χ : Kˣ →* ℂˣ)
+    (hχ : IsQuadraticCharacter χ) :
     z ∈ ↑χ.range → z ∈ plusMinusOneSubgroup := by
   intro hz
   simp only [plusMinusOneSubgroup]
@@ -504,7 +533,7 @@ lemma quad_char_has_range_in_plusMinusOne {z : ℂˣ} (χ : Kˣ →* ℂˣ) (hχ
   rw[← hx]
   have hχxsq1 : χ x ^ 2 = 1 := hχ.sq_eq_one x
   have hχxsq1C : (χ x : ℂ) ^ 2 = 1 := (mem_rootsOfUnity' 2 (χ x)).mp hχxsq1
-  apply z_square_eq_one_implies_z_eq_one_or_neg_one (χ x) at hχxsq1C
+  apply eq_one_or_eq_neg_one_of_sq_eq_one (χ x) at hχxsq1C
   rcases hχxsq1C with h1 | hneg1
   · left
     have := Units.mk0.congr_simp (χ x : ℂ) (1 : ℂ) h1 (Units.ne_zero (χ x))
@@ -518,11 +547,12 @@ lemma quad_char_has_range_in_plusMinusOne {z : ℂˣ} (χ : Kˣ →* ℂˣ) (hχ
     simpa only [Units.mk0_val, mk0_negone (by norm_num)] using this
 
 omit [Fintype K] [DecidableEq K] in
-lemma quad_char_has_range_plusMinusOne (χ : Kˣ →* ℂˣ) (hχ : IsQuadraticCharacter χ) :
+/-- The range of any quadratic character is exactly `{±1}`. -/
+lemma quadraticCharacter_range_eq_plusMinusOne (χ : Kˣ →* ℂˣ) (hχ : IsQuadraticCharacter χ) :
     χ.range = plusMinusOneSubgroup := by
   ext z
   constructor
-  · exact quad_char_has_range_in_plusMinusOne χ hχ
+  · exact quadraticCharacter_range_le_plusMinusOne χ hχ
   · intro hz
     rw[plusMinusOneSubgroup] at hz
     rcases hz with h1 | hneg1
@@ -537,14 +567,16 @@ lemma quad_char_has_range_plusMinusOne (χ : Kˣ →* ℂˣ) (hχ : IsQuadraticC
       rcases this with ⟨x, hx⟩
       have : χ x ∈ χ.range := by
         use x
-      have : χ x ∈ plusMinusOneSubgroup := quad_char_has_range_in_plusMinusOne χ hχ this
+      have : χ x ∈ plusMinusOneSubgroup := quadraticCharacter_range_le_plusMinusOne χ hχ this
       simp only [plusMinusOneSubgroup] at this
       rcases this with h1' | hneg1'
       · tauto
       · rw[← hneg1']
         exact SetLike.mem_coe.mpr this
 
-lemma group_homs_same_ker_same_range_differ_by_auto
+/-- If two group homomorphisms have the same kernel and the same range, then they differ by
+an automorphism of the range. -/
+lemma exists_mulEquiv_range_of_same_ker_same_range
     {G H : Type*} [Group G] [Group H]
     (f g : G →* H)
     (hker : f.ker = g.ker)
@@ -637,39 +669,34 @@ lemma group_homs_same_ker_same_range_differ_by_auto
     simpa [y] using hwf y
   simpa [y, MonoidHom.rangeRestrict] using congrArg (fun z : f.range => ((z : f.range) : H)) hyφ
 
-
-lemma group_homs_determined_by_ker_and_range_up_to_auto
+/-- If the automorphism group of the range is trivial, then group homomorphisms with the same kernel
+and range are equal. -/
+lemma eq_of_same_ker_same_range_of_rangeAut_trivial
     {G H : Type*} [Group G] [Group H]
     (f g : G →* H)
     (hker : f.ker = g.ker)
     (hrange : f.range = g.range)
     (hAut : ∀ φ : f.range ≃* f.range, φ = MulEquiv.refl _) :
     f = g := by
-  rcases group_homs_same_ker_same_range_differ_by_auto f g hker hrange with ⟨φ, hφ⟩
+  rcases exists_mulEquiv_range_of_same_ker_same_range f g hker hrange with ⟨φ, hφ⟩
   have : φ = MulEquiv.refl _ := hAut φ
   rw[this] at hφ
   simp only [MulEquiv.refl_apply, MonoidHom.coe_rangeRestrict] at hφ
   ext x
   exact hφ x
 
-
-
-
-
-
-
-
 omit [Fintype K] [DecidableEq K] in
-lemma quad_char_determined_by_ker (χ θ : Kˣ →* ℂˣ) (hχ : IsQuadraticCharacter χ)
+/-- Any two quadratic characters with the same kernel are equal. -/
+lemma quadraticCharacter_eq_of_same_ker (χ θ : Kˣ →* ℂˣ) (hχ : IsQuadraticCharacter χ)
     (hθ : IsQuadraticCharacter θ) (hker : χ.ker = θ.ker) : χ = θ := by
-  apply group_homs_determined_by_ker_and_range_up_to_auto
+  apply eq_of_same_ker_same_range_of_rangeAut_trivial
   · exact hker
-  · have hχrange: χ.range = plusMinusOneSubgroup := quad_char_has_range_plusMinusOne χ hχ
-    have hθrange: θ.range = plusMinusOneSubgroup := quad_char_has_range_plusMinusOne θ hθ
+  · have hχrange : χ.range = plusMinusOneSubgroup := quadraticCharacter_range_eq_plusMinusOne χ hχ
+    have hθrange : θ.range = plusMinusOneSubgroup := quadraticCharacter_range_eq_plusMinusOne θ hθ
     apply SetLike.ext'
     rw[hχrange, hθrange]
   · intro φ
-    have hχrange: χ.range = plusMinusOneSubgroup := quad_char_has_range_plusMinusOne χ hχ
+    have hχrange : χ.range = plusMinusOneSubgroup := quadraticCharacter_range_eq_plusMinusOne χ hχ
     have : φ 1 = 1 := MulEquiv.map_one φ
     by_contra hc
     have : ∃ z : (χ.range), φ z ≠ z := by
@@ -680,7 +707,7 @@ lemma quad_char_determined_by_ker (χ θ : Kˣ →* ℂˣ) (hχ : IsQuadraticCha
       rw[← hχrange]
       exact Subtype.coe_prop z
     rcases this with h1 | hneg1
-    · have hzne1: z ≠ 1 := by
+    · have hzne1 : z ≠ 1 := by
         by_contra c
         rw[c] at hz
         tauto
@@ -721,7 +748,8 @@ lemma quad_char_determined_by_ker (χ θ : Kˣ →* ℂˣ) (hχ : IsQuadraticCha
       norm_num at hneg1
 
 omit [DecidableEq K] in
-lemma quad_chars_obv_ker_containment {χ : Kˣ →* ℂˣ} (hχ : IsQuadraticCharacter χ) :
+/-- The kernel of `quadChar` is contained in the kernel of any quadratic character. -/
+lemma quadChar_ker_le_of_isQuadraticCharacter {χ : Kˣ →* ℂˣ} (hχ : IsQuadraticCharacter χ) :
     quadChar.ker ≤ χ.ker := by
   intro x hx
   simp only [quadChar, MonoidHom.mem_ker, MonoidHom.coe_mk, OneHom.coe_mk, quadCharFun,
@@ -734,12 +762,13 @@ lemma quad_chars_obv_ker_containment {χ : Kˣ →* ℂˣ} (hχ : IsQuadraticCha
   exact MonoidHom.mem_ker.mpr hχysq1
 
 omit [DecidableEq K] in
-lemma quad_chars_kers_same_card {χ θ : Kˣ →* ℂˣ}
+/-- Any two quadratic characters have kernels of the same cardinality. -/
+lemma card_ker_eq_of_isQuadraticCharacter {χ θ : Kˣ →* ℂˣ}
     (hχ : IsQuadraticCharacter χ) (hθ : IsQuadraticCharacter θ) :
-    Fintype.card χ.ker  = Fintype.card θ.ker := by
-  have hχrange : χ.range = plusMinusOneSubgroup := quad_char_has_range_plusMinusOne χ hχ
+    Fintype.card χ.ker = Fintype.card θ.ker := by
+  have hχrange : χ.range = plusMinusOneSubgroup := quadraticCharacter_range_eq_plusMinusOne χ hχ
   have hθrange : θ.range = plusMinusOneSubgroup :=
-    quad_char_has_range_plusMinusOne θ hθ
+    quadraticCharacter_range_eq_plusMinusOne θ hθ
   have hχquot :
       Fintype.card (Kˣ ⧸ χ.ker) = Fintype.card plusMinusOneSubgroup := by
     have :=
@@ -755,12 +784,10 @@ lemma quad_chars_kers_same_card {χ θ : Kˣ →* ℂˣ}
     rw [hχquot, hθquot]
   have hcardχ :
       Fintype.card Kˣ = Fintype.card χ.ker * Fintype.card (Kˣ ⧸ χ.ker) := by
-    classical
     simpa [eq_comm, Subgroup.index_eq_card] using
       Subgroup.card_mul_index (χ.ker)
   have hcardθ :
       Fintype.card Kˣ = Fintype.card θ.ker * Fintype.card (Kˣ ⧸ θ.ker) := by
-    classical
     simpa [eq_comm, Subgroup.index_eq_card] using
       Subgroup.card_mul_index (θ.ker)
   rw [hcardχ] at hcardθ
@@ -769,64 +796,32 @@ lemma quad_chars_kers_same_card {χ θ : Kˣ →* ℂˣ}
   apply Nat.mul_right_cancel this
   exact hcardθ
 
-
 omit [DecidableEq K] in
-lemma quad_chars_have_same_ker {χ : Kˣ →* ℂˣ} (hχ : IsQuadraticCharacter χ) (hK : ringChar K ≠ 2) :
-    χ.ker =  quadChar.ker := by
+/-- Any quadratic character has the same kernel as `quadChar`. -/
+lemma ker_eq_quadChar_ker_of_isQuadraticCharacter {χ : Kˣ →* ℂˣ}
+    (hχ : IsQuadraticCharacter χ) (hK : ringChar K ≠ 2) :
+    χ.ker = quadChar.ker := by
       symm
-      apply Subgroup.eq_of_le_of_card_ge (quad_chars_obv_ker_containment hχ)
-      have := (quad_chars_kers_same_card hχ (quadChar_is_quadratic_char hK)).symm
+      apply Subgroup.eq_of_le_of_card_ge (quadChar_ker_le_of_isQuadraticCharacter hχ)
+      have := (card_ker_eq_of_isQuadraticCharacter hχ (quadChar_isQuadraticCharacter hK)).symm
       simpa [Nat.card_eq_fintype_card] using le_of_eq this.symm
 
-
+/-- Over a finite field of odd characteristic, there exists a unique quadratic character. -/
 theorem exists_unique_quadraticCharacter
     {K : Type*} [Field K] [Finite K] (hK : ringChar K ≠ 2) :
     ∃! χ : Kˣ →* ℂˣ, IsQuadraticCharacter χ := by
   letI : Fintype K := Fintype.ofFinite K
   letI : Fintype Kˣ := Fintype.ofFinite Kˣ
-  have : Fintype.card K ≠ 2 := char_ne_2_impl_card_ne_2 hK
-  haveI : Nontrivial (Kˣ) := by
-    have : ∃ a : K, a ≠ 0 ∧ a ≠ 1 := by
-      by_contra h
-      push_neg at h
-      have h_univ_has_2_elts: (Set.univ : Set K) = {0, 1} := by
-        ext x
-        simp only [Set.mem_singleton_iff, Set.mem_univ, Set.mem_insert_iff, true_iff]
-        by_cases hx0 : x = 0
-        · left; exact hx0
-        · right; apply h; exact hx0
-      have : Fintype.card K = 2 := by
-        rw [← Finset.card_univ]
-        haveI : DecidableEq K := Classical.decEq K
-        have h_finset_univ : (Finset.univ : Finset K) = ({(0 : K), (1 : K)} : Finset K) := by
-          ext x
-          simp only [Finset.mem_univ, Finset.mem_insert, Finset.mem_singleton, true_iff]
-          exact Decidable.or_iff_not_imp_left.mpr (h x)
-        have hcard := congrArg Finset.card h_finset_univ
-        simpa [zero_ne_one] using hcard
-      tauto
-    rcases this with ⟨a, ha0, ha1⟩
-    use Units.mk0 a ha0
-    have hone_ne_zero : (1 : K) ≠ 0 := by
-      norm_num
-    use Units.mk0 1 (hone_ne_zero)
-    have hinj (x y : K)(hx : x ≠ 0)(hy : y ≠ 0): Units.mk0 x hx = Units.mk0 y hy → x = y := by
-      intro h
-      exact congrArg (fun u : Kˣ => (u : K)) h
-    exact Ne.intro fun a_1 ↦ ha1 (hinj a 1 ha0 hone_ne_zero a_1)
+  have : Fintype.card K ≠ 2 := card_ne_two_of_ringChar_ne_two hK
   apply ExistsUnique.intro quadChar
-  · exact quadChar_is_quadratic_char hK
+  · exact quadChar_isQuadraticCharacter hK
   · intro χ hχ
-    apply quad_char_determined_by_ker χ quadChar hχ (quadChar_is_quadratic_char hK)
-    exact quad_chars_have_same_ker hχ hK
+    apply quadraticCharacter_eq_of_same_ker χ quadChar hχ (quadChar_isQuadraticCharacter hK)
+    exact ker_eq_quadChar_ker_of_isQuadraticCharacter hχ hK
 
-
-
-end Basic
-
+end QuadraticCharacter
 
 section CurveCounting
-
 
 variable (A B : K)
 
@@ -836,21 +831,18 @@ def is_on_EC (x y : K) : Prop := (y ^ 2) = rhs A B x
 
 def is_on_curve_f (f : K → K) (x y : K) : Prop := (y ^ 2) = f x
 
-
-noncomputable def affinePointSet : Finset (K × K) := by
-  classical
-  exact Finset.univ.filter (fun P : K × K => is_on_EC A B P.1 P.2)
-
+/-- The set of all solutions to `y ^ 2 = f x` as a finite subset of `K × K`. -/
 noncomputable def affinePointSet_f (f : K → K) : Finset (K × K) := by
   classical
   exact Finset.univ.filter (fun P : K × K => is_on_curve_f f P.1 P.2)
 
+/-- Extend a quadratic character on `Kˣ` to a function `K → ℂ` by sending `0` to `0`. -/
 noncomputable def CharToFun (χ : Kˣ →* ℂˣ) : K → ℂ := by
   classical
   exact fun x =>
     if hx : x = 0 then 0 else (χ (Units.mk0 x hx) : ℂ)
 
-
+/-- For `x : K`, the fiber of `y ^ 2 = f x` over `x`. -/
 noncomputable def fiberOverX (f : K → K) (x : K) : Finset (K × K) :=
   (Finset.univ.filter fun y : K => y ^ 2 = f x).map
     ⟨fun y => (x, y), by
@@ -859,6 +851,7 @@ noncomputable def fiberOverX (f : K → K) (x : K) : Finset (K × K) :=
       simpa using this
     ⟩
 
+/-- The solution set of `y ^ 2 = f x` is the union of the fibers over `x`. -/
 lemma affinePointSet_f_eq_biUnion (f : K → K) :
     affinePointSet_f f = (Finset.univ : Finset K).biUnion (fiberOverX f) := by
   ext P
@@ -893,6 +886,7 @@ lemma affinePointSet_f_eq_biUnion (f : K → K) :
     rw [h1, h2]
     exact hy.1
 
+/-- Distinct fibers are disjoint. -/
 lemma fiberOverX_disjoint {f : K → K} {x1 x2 : K} (h : x1 ≠ x2) :
     Disjoint (fiberOverX f x1) (fiberOverX f x2) := by
   rw [@Finset.disjoint_iff_ne]
@@ -925,6 +919,7 @@ lemma fiberOverX_disjoint {f : K → K} {x1 x2 : K} (h : x1 ≠ x2) :
     exact h
   exact this (by simp only [hEq])
 
+/-- The cardinality of the solution set is the sum of the cardinalities of the fibers. -/
 lemma card_affinePointSet_f_eq_sum_card_fiberOverX (f : K → K) :
     (affinePointSet_f f).card
       = ∑ x ∈ (Finset.univ : Finset K), (fiberOverX f x).card := by
@@ -934,19 +929,23 @@ lemma card_affinePointSet_f_eq_sum_card_fiberOverX (f : K → K) :
   exact fiberOverX_disjoint (f := f) hxz
 
 omit [DecidableEq K] in
-lemma hcard1 (f : K → K) :
+/-- Helper lemma converting `Finset.card` to `Fintype.card` for `affinePointSet_f`. -/
+lemma card_affinePointSet_f_eq_fintype_card (f : K → K) :
     (affinePointSet_f f).card = Fintype.card (affinePointSet_f f) := by
   simp
 
-lemma hcard2 {x : K} (f : K → K) :
+/-- Helper lemma converting `Finset.card` to `Fintype.card` for `fiberOverX`. -/
+lemma card_fiberOverX_eq_fintype_card {x : K} (f : K → K) :
     (fiberOverX f x).card = Fintype.card (fiberOverX f x) := by
   simp
 
 open Polynomial
 
+/-- For `a : K`, the polynomial `X^2 - a`. -/
 noncomputable def sq_roots_poly (a : K) : Polynomial K := (X : Polynomial K) ^ 2 - C a
 
 omit [DecidableEq K] [Fintype K] in
+/-- The polynomial `X^2 - a` is nonzero. -/
 lemma sq_roots_poly_ne_zero (x : K) :
     sq_roots_poly x ≠ 0 := by
   simp only [sq_roots_poly, ne_eq]
@@ -954,6 +953,7 @@ lemma sq_roots_poly_ne_zero (x : K) :
   have hcoeff := congrArg (fun p => coeff p 2) h
   simp at hcoeff
 
+/-- If `x` is a nonzero square and `ringChar K ≠ 2`, then `x` has exactly two square roots. -/
 lemma card_square_roots {x : K} (h0 : x ≠ 0) (hx : IsSquare x) (hK : ringChar K ≠ 2) :
     Fintype.card {z : K | z ^ 2 = x} = 2 := by
   rcases hx with ⟨y, hy⟩
@@ -976,7 +976,7 @@ lemma card_square_roots {x : K} (h0 : x ≠ 0) (hx : IsSquare x) (hK : ringChar 
     simp only [mul_neg] at this
     apply hK
     rw [← @neg_one_eq_one_iff]
-    have hy0: y ≠ 0 := by
+    have hy0 : y ≠ 0 := by
       by_contra hy0
       apply h0
       rw[hy0] at hy
@@ -1012,7 +1012,7 @@ lemma card_square_roots {x : K} (h0 : x ≠ 0) (hx : IsSquare x) (hK : ringChar 
         (sq_roots_poly x).roots.toFinset.card ≤ 2 := by
       have hdeg : (sq_roots_poly x).natDegree = 2 := by
         simp only [sq_roots_poly, natDegree_sub_C, natDegree_pow, natDegree_X, mul_one]
-      rw[←hdeg]
+      rw[← hdeg]
       have ineq1 : (sq_roots_poly x).roots.card ≤ (sq_roots_poly x).natDegree :=
         card_roots' (sq_roots_poly x)
       have ineq2 : (sq_roots_poly x).roots.toFinset.card ≤ (sq_roots_poly x).roots.card :=
@@ -1052,8 +1052,8 @@ lemma card_square_roots {x : K} (h0 : x ≠ 0) (hx : IsSquare x) (hK : ringChar 
     exact hpaircard
   rwa [← Set.toFinset_card ({z : K | z ^ 2 = x})]
 
-
-lemma card_square_roots' {x : K} (hx : ¬ IsSquare x) :
+/-- If `x` is not a square, then `x` has no square roots. -/
+lemma card_square_roots_of_not_isSquare {x : K} (hx : ¬ IsSquare x) :
     Fintype.card {z : K | z ^ 2 = x} = 0 := by
   refine Fintype.card_eq_zero_iff.mpr ?_
   rw [@isEmpty_subtype]
@@ -1064,13 +1064,13 @@ lemma card_square_roots' {x : K} (hx : ¬ IsSquare x) :
   simp only [Set.mem_setOf_eq] at hz
   exact hz.symm
 
-
-
+/-- A helper lemma converting a previous cardinality identity into the type needed later. -/
 lemma card_affinePointSet_f_eq_sum_card_fiberOverX_finType (f : K → K) :
     Fintype.card (affinePointSet_f f)
       = ∑ x ∈ (Finset.univ : Finset K), Fintype.card (fiberOverX f x) := by
   simpa using card_affinePointSet_f_eq_sum_card_fiberOverX (f := f)
 
+/-- The number of affine points on `y ^ 2 = f x` is given by a character sum. -/
 theorem affinePointSet_f_count (f : K → K) (hK : ringChar K ≠ 2) :
     Fintype.card (affinePointSet_f f) =
     Fintype.card K + ∑ x ∈ (Finset.univ : Finset K), (CharToFun quadChar) (f x) := by
@@ -1109,7 +1109,7 @@ theorem affinePointSet_f_count (f : K → K) (hK : ringChar K ≠ 2) :
     simp only [quadChar, MonoidHom.coe_mk, OneHom.coe_mk, quadCharFun]
     by_cases is_sq : IsSquare (f x)
     · have hsquare_units : IsSquare (Units.mk0 (f x) hf0) :=
-        (is_square_conversion_from_field (f x) hf0).mp is_sq
+        (isSquare_mk0_iff (f x) hf0).mp is_sq
       simp only [hsquare_units, ↓reduceIte, Units.val_one]
       norm_num
       have hsq : Fintype.card {z : K // z ^ 2 = f x} = 2 :=
@@ -1124,13 +1124,13 @@ theorem affinePointSet_f_count (f : K → K) (hK : ringChar K ≠ 2) :
       simpa using hconv.trans hsqC
     · have hsquare_units : ¬ IsSquare (Units.mk0 (f x) hf0) := by
         intro hs
-        have : IsSquare (f x) := (is_square_conversion_from_field (f x) hf0).mpr hs
+        have : IsSquare (f x) := (isSquare_mk0_iff (f x) hf0).mpr hs
         exact is_sq this
       simp only [hsquare_units, ↓reduceIte, Units.val_neg, Units.val_one, add_neg_cancel,
         Nat.cast_eq_zero, Finset.card_eq_zero, Finset.filter_eq_empty_iff, Finset.mem_univ,
         forall_const]
       have hsq : Fintype.card {z : K // z ^ 2 = f x} = 0 :=
-        card_square_roots' is_sq
+        card_square_roots_of_not_isSquare is_sq
       have hconv :
           ((({y : K | y ^ 2 = f x} : Set K).toFinset.card : ℂ))
             = Fintype.card {y : K // y ^ 2 = f x} := by
@@ -1146,27 +1146,28 @@ theorem affinePointSet_f_count (f : K → K) (hK : ringChar K ≠ 2) :
       symm
       exact hc
 
-
+/-- The extended quadratic character with values in `ℤ`. -/
 noncomputable def φ (a : K) : ℤ :=
   if a = 0 then 0
   else if IsSquare a then 1 else -1
 
+/-- `φ`, viewed in `ℂ`, agrees with `CharToFun quadChar`. -/
 lemma phi_eq_CharToFun_quadChar (a : K) :
     (φ a : ℂ) = CharToFun quadChar a := by
   simp [φ, CharToFun, quadChar, quadCharFun]
   by_cases ha0 : a = 0
   · simp[ha0]
   · by_cases ha_sq : IsSquare a
-    · have : IsSquare (Units.mk0 a ha0) := (is_square_conversion_from_field a ha0).mp ha_sq
+    · have : IsSquare (Units.mk0 a ha0) := (isSquare_mk0_iff a ha0).mp ha_sq
       simp[ha0, ha_sq, this]
     · have : ¬ IsSquare (Units.mk0 a ha0) := by
         intro hs
-        have : IsSquare a := (is_square_conversion_from_field a ha0).mpr hs
+        have : IsSquare a := (isSquare_mk0_iff a ha0).mpr hs
         exact ha_sq this
       simp[ha0, ha_sq, this]
 
-
 omit [DecidableEq K] in
+/-- An upper bound on the number of affine points on `y ^ 2 = f x`. -/
 theorem affinePointSet_bounds {f : K → K} (hK : ringChar K ≠ 2) :
     Fintype.card (affinePointSet_f f) ≤ 2 * Fintype.card K := by
   classical
@@ -1222,7 +1223,6 @@ theorem affinePointSet_bounds {f : K → K} (hK : ringChar K ≠ 2) :
     rw [hones] at hadd
     simpa [two_mul, add_comm, add_left_comm, add_assoc] using hadd
   exact_mod_cast hboundZ
-
 
 end CurveCounting
 
