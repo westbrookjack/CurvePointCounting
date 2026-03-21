@@ -825,10 +825,6 @@ section CurveCounting
 
 variable (A B : K)
 
-def rhs (x : K) : K := x^3 + A*x + B
-
-def is_on_EC (x y : K) : Prop := (y ^ 2) = rhs A B x
-
 def is_on_curve_f (f : K → K) (x y : K) : Prop := (y ^ 2) = f x
 
 /-- The set of all solutions to `y ^ 2 = f x` as a finite subset of `K × K`. -/
