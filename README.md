@@ -1,13 +1,19 @@
-# EllipticProject
+# CurvePointCounting
 
-## GitHub configuration
+A mathematical formalization project in Lean 4 and Mathlib, exploring quadratic characters over finite fields and formulas for counting solutions to equations of the form `y² = f(x)`.
 
-To set up your new GitHub repository, follow these steps:
+## Mathematical content
 
-* Under your repository name, click **Settings**.
-* In the **Actions** section of the sidebar, click "General".
-* Check the box **Allow GitHub Actions to create and approve pull requests**.
-* Click the **Pages** section of the settings sidebar.
-* In the **Source** dropdown menu, select "GitHub Actions".
+- `CurvePointCounting/EulerCriterion.lean`: supporting finite-field results.
+- `CurvePointCounting/PointCounting.lean`: quadratic characters, their uniqueness in odd characteristic, and a character-sum expression for the number of affine solutions.
+- Main declarations include `exists_unique_quadraticCharacter`, `affinePointSet_f_count`, and `affinePointSet_bounds`.
 
-After following the steps above, you can remove this section from the README file.
+This project develops formal proofs and mathematical infrastructure; it is not a benchmarked numerical point-counting library.
+
+## Toolchain
+
+The repository pins Lean and Mathlib in `lean-toolchain`, `lakefile.toml`, and `lake-manifest.json`. Use those versions when working with the project.
+
+## Author
+
+[Jack Westbrook](https://westbrookjack.github.io) — MSc in Pure Mathematics, Imperial College London; BA in Mathematics, UW–Madison.
