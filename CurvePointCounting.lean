@@ -1,0 +1,2 @@
+import CurvePointCounting.EulerCriterion
+import CurvePointCounting.PointCounting
