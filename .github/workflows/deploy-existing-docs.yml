@@ -1,0 +1,41 @@
+name: Deploy existing documentation
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      # Reuse docs built from c8223ecf3f44a5d4181c87fdbd4ed1a6ee63de25.
+      # This recovery workflow works only while the source artifact is retained.
+      - name: Download built documentation
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          artifact-ids: 11990904944
+          run-id: 38723703978
+          github-token: ${{ github.token }}
+          path: recovered
+          merge-multiple: true
+      - name: Verify Pages archive
+        run: test -s recovered/artifact.tar
+      - name: Upload unchanged archive for this deployment
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: github-pages
+          path: recovered/artifact.tar
+          if-no-files-found: error
+          retention-days: 1
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
